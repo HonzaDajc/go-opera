@@ -418,7 +418,9 @@ func getStructLogForTransaction(
 	block *evmcore.EvmBlock,
 	index uint64,
 	timeout time.Duration) (*TraceStructLogger, *types.Message, *evmcore.ExecutionResult, error) {
-
+	defer func(start time.Time) {
+		log.Info("Get structLog for transaction", "runtime", time.Since(start), "txHash", tx.Hash().String())
+	}(time.Now())
 	// Config set for debug and to collect all information from EVM
 	cfg := vm.Config{}
 	cfg.Debug = true
@@ -494,7 +496,7 @@ func getStructLogForTransaction(
 // Trace transaction and return processed result
 func traceTx(ctx context.Context, state *state.StateDB, header *evmcore.EvmHeader, backend Backend, block *evmcore.EvmBlock, tx *types.Transaction, index uint64, timeout time.Duration) (*[]ActionTrace, error) {
 	defer func(start time.Time) {
-		log.Info("Tracing transaction successful", "runtime", time.Since(start), "tx", tx.Hash().String())
+		log.Info("Tracing transaction successful", "runtime", time.Since(start), "txHash", tx.Hash().String())
 	}(time.Now())
 	txTrace := CallTrace{
 		Actions: make([]ActionTrace, 0),
