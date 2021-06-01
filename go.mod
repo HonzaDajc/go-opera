@@ -3,6 +3,7 @@ module github.com/Fantom-foundation/go-opera
 go 1.14
 
 require (
+	github.com/DeBankDeFi/eth v1.10.3
 	github.com/Fantom-foundation/lachesis-base v0.0.0-20210420092627-c16f01e35562
 	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/aristanetworks/goarista v0.0.0-20191023202215-f096da5361bb // indirect
@@ -15,7 +16,7 @@ require (
 	github.com/docker/docker v1.13.1
 	github.com/dvyukov/go-fuzz v0.0.0-20201127111758-49e582c6c23d
 	github.com/edsrzf/mmap-go v1.0.0 // indirect
-	github.com/ethereum/go-ethereum v1.9.22
+	github.com/ethereum/go-ethereum v1.10.3
 	github.com/evalphobia/logrus_sentry v0.8.2
 	github.com/fatih/color v1.7.0 // indirect
 	github.com/fjl/memsize v0.0.0-20190710130421-bcb5799ab5e5
@@ -25,7 +26,7 @@ require (
 	github.com/google/uuid v1.1.1 // indirect
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/hashicorp/golang-lru v0.5.4
-	github.com/holiman/uint256 v1.1.1 // indirect
+	github.com/holiman/uint256 v1.1.1
 	github.com/influxdata/influxdb v1.7.9 // indirect
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
 	github.com/karalabe/usb v0.0.0-20191104083709-911d15fe12a9 // indirect
@@ -51,6 +52,7 @@ require (
 	github.com/uber/jaeger-client-go v2.20.1+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible
 	go.uber.org/atomic v1.5.1 // indirect
+	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	gopkg.in/urfave/cli.v1 v1.20.0
 )
 
