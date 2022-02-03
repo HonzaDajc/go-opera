@@ -57,6 +57,18 @@ func TestTxTracing(t *testing.T) {
 	txHashDeploy := cliConsoleOutput[strings.Index(cliConsoleOutput, "0x") : len(cliConsoleOutput)-3]
 	time.Sleep(500 * time.Millisecond)
 
+	// Because go-opera/geth console doesn't implement async calls
+	// wait for the transactions to be processed
+	for i := 0; i < 5; i++ {
+		cliConsole.InputLine("ftm.getTransaction('" + txHashDeploy + "')")
+		cliConsoleOutput = *cliConsole.GetOutDataTillCursor()
+		if strings.Contains(cliConsoleOutput, "null") {
+			time.Sleep(500 * time.Millisecond)
+		} else {
+			break
+		}
+	}
+
 	// Close node console
 	cliConsole.InputLine("exit")
 	cliConsole.WaitExit()
