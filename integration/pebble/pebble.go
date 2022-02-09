@@ -1,6 +1,7 @@
 package pebble
 
 import (
+	"fmt"
 	"github.com/Fantom-foundation/lachesis-base/kvdb"
 	"github.com/cockroachdb/pebble"
 	"sync"
@@ -200,7 +201,10 @@ func bytesPrefix(prefix []byte) pebble.IterOptions {
 
 // Stat returns a particular internal stat of the database.
 func (db *Database) Stat(property string) (string, error) {
-	return "", pebble.ErrNotFound
+	if property == "leveldb.iostats" {
+		return fmt.Sprintf("Read(MB):%.5f Write(MB):%.5f", 0.0, 0.0), nil // TODO
+	}
+	return "", fmt.Errorf("pebble property %s does not exists", property)
 }
 
 // Compact flattens the underlying data store for the given key range. In essence,
