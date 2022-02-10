@@ -202,9 +202,11 @@ func bytesPrefix(prefix []byte) pebble.IterOptions {
 // Stat returns a particular internal stat of the database.
 func (db *Database) Stat(property string) (string, error) {
 	if property == "leveldb.iostats" {
-		return fmt.Sprintf("Read(MB):%.5f Write(MB):%.5f", 0.0, 0.0), nil // TODO
+		return fmt.Sprintf("Read(MB):%.5f Write(MB):%.5f",
+			float64(db.db.Metrics().Total().BytesRead)/1048576.0, // 1024*1024
+			float64(db.db.Metrics().Total().BytesIn)/1048576.0), nil
 	}
-	return "", fmt.Errorf("pebble property %s does not exists", property)
+	return "", fmt.Errorf("pebble stat property %s does not exists", property)
 }
 
 // Compact flattens the underlying data store for the given key range. In essence,
