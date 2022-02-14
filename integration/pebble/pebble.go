@@ -115,12 +115,12 @@ func (db *Database) Get(key []byte) ([]byte, error) {
 
 // Put inserts the given value into the key-value store.
 func (db *Database) Put(key []byte, value []byte) error {
-	return db.db.Set(key, value, nil)
+	return db.db.Set(key, value, pebble.Sync)
 }
 
 // Delete removes the key from the key-value store.
 func (db *Database) Delete(key []byte) error {
-	return db.db.Delete(key, nil)
+	return db.db.Delete(key, pebble.Sync)
 }
 
 // NewBatch creates a write-only key-value store that buffers changes to its host
@@ -291,14 +291,14 @@ type batch struct {
 
 // Put inserts the given value into the batch for later committing.
 func (b *batch) Put(key, value []byte) error {
-	err := b.b.Set(key, value, nil)
+	err := b.b.Set(key, value, pebble.NoSync)
 	b.size += len(value)
 	return err
 }
 
 // Delete inserts the key removal into the batch for later committing.
 func (b *batch) Delete(key []byte) error {
-	err := b.b.Delete(key, nil)
+	err := b.b.Delete(key, pebble.NoSync)
 	b.size++
 	return err
 }
@@ -310,7 +310,7 @@ func (b *batch) ValueSize() int {
 
 // Write flushes any accumulated data to disk.
 func (b *batch) Write() error {
-	return b.db.Apply(b.b, nil)
+	return b.db.Apply(b.b, pebble.Sync)
 }
 
 // Reset resets the batch for reuse.
