@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -2037,6 +2038,129 @@ func (api *PublicDebugAPI) BlocksTransactionTimes(ctx context.Context, untilBloc
 	}
 
 	return times, nil
+}
+
+// Context contains some contextual infos for a transaction execution that is not
+// available from within the EVM object.
+type Context struct {
+	BlockHash common.Hash // Hash of the block the tx is contained within (zero if dangling tx or call)
+	TxIndex   int         // Index of the transaction within a block (zero if dangling tx or call)
+	TxHash    common.Hash // Hash of the transaction being traced (zero if dangling call)
+}
+
+// TraceTransaction returns the structured logs created during the execution of EVM
+// and returns them as a JSON object.
+func (api *PublicDebugAPI) TraceTransaction(ctx context.Context, hash common.Hash) (interface{}, error) {
+	tx, blockNumber, index, err := api.b.GetTransaction(ctx, hash)
+	if err != nil {
+		return nil, err
+	}
+	if tx == nil {
+		return nil, errors.New("transaction was not found")
+	}
+
+	// It shouldn't happen in practice.
+	if blockNumber == 0 {
+		return nil, errors.New("genesis is not traceable")
+	}
+
+	block, err := api.b.BlockByNumber(ctx, rpc.BlockNumber(blockNumber))
+	if err != nil {
+		return nil, errors.New("cannot get block from db")
+	}
+
+	msg, vmctx, statedb, err := api.stateAtTransaction(ctx, block, int(index))
+	if err != nil {
+		return nil, err
+	}
+
+	txctx := &Context{
+		BlockHash: block.Hash,
+		TxIndex:   int(index),
+		TxHash:    hash,
+	}
+
+	return api.traceTx(ctx, msg, txctx, vmctx, statedb)
+}
+
+// traceTx configures a new tracer according to the provided configuration, and
+// executes the given message in the provided environment. The return value will
+// be tracer dependent.
+func (api *PublicDebugAPI) traceTx(ctx context.Context, message core.Message, txctx *Context, vmctx vm.BlockContext, statedb *state.StateDB) (interface{}, error) {
+	// Assemble the structured logger or the JavaScript tracer
+	var (
+		err       error
+		txContext = core.NewEVMTxContext(message)
+	)
+
+	tracer := vm.NewStructLogger(nil)
+
+	// Run the transaction with tracing enabled.
+	vmenv := vm.NewEVM(vmctx, txContext, statedb, api.b.ChainConfig(), vm.Config{Debug: true, Tracer: tracer})
+
+	// Call Prepare to clear out the statedb access list
+	statedb.Prepare(txctx.TxHash, txctx.BlockHash, txctx.TxIndex)
+
+	result, err := evmcore.ApplyMessage(vmenv, message, new(evmcore.GasPool).AddGas(message.Gas()))
+	if err != nil {
+		return nil, fmt.Errorf("tracing failed: %w", err)
+	}
+
+	// If the result contains a revert reason, return it.
+	returnVal := fmt.Sprintf("%x", result.Return())
+	if len(result.Revert()) > 0 {
+		returnVal = fmt.Sprintf("%x", result.Revert())
+	}
+	return &ExecutionResult{
+		Gas:         result.UsedGas,
+		Failed:      result.Failed(),
+		ReturnValue: returnVal,
+		StructLogs:  FormatLogs(tracer.StructLogs()),
+	}, nil
+
+}
+
+// stateAtTransaction returns the execution environment of a certain transaction.
+func (api *PublicDebugAPI) stateAtTransaction(ctx context.Context, block *evmcore.EvmBlock, txIndex int) (evmcore.Message, vm.BlockContext, *state.StateDB, error) {
+	// Short circuit if it's genesis block.
+	if block.NumberU64() == 0 {
+		return nil, vm.BlockContext{}, nil, errors.New("no transaction in genesis")
+	}
+	// Create the parent state database
+	parent, err := api.b.BlockByHash(ctx, block.ParentHash)
+	if parent == nil || err != nil {
+		return nil, vm.BlockContext{}, nil, fmt.Errorf("parent %#x not found", block.ParentHash)
+	}
+	// Lookup the statedb of parent block from the live database,
+	// otherwise regenerate it on the flight.
+	statedb, _, err := api.b.StateAndHeaderByNumberOrHash(ctx, rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(parent.NumberU64())))
+	if err != nil {
+		return nil, vm.BlockContext{}, nil, err
+	}
+	if txIndex == 0 && len(block.Transactions) == 0 {
+		return nil, vm.BlockContext{}, statedb, nil
+	}
+	// Recompute transactions up to the target index.
+	signer := gsignercache.Wrap(types.MakeSigner(api.b.ChainConfig(), block.Number))
+	for idx, tx := range block.Transactions {
+		// Assemble the transaction call message and return if the requested offset
+		msg, _ := tx.AsMessage(signer)
+		txContext := evmcore.NewEVMTxContext(msg)
+		context := evmcore.NewEVMBlockContext(block.Header(), nil, nil)
+		if idx == txIndex {
+			return msg, context, statedb, nil
+		}
+		// Not yet the searched for transaction, execute on top of the current state
+		vmenv := vm.NewEVM(context, txContext, statedb, api.b.ChainConfig(), vm.Config{})
+		statedb.Prepare(tx.Hash(), block.Hash, idx)
+		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
+			return nil, vm.BlockContext{}, nil, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
+		}
+		// Ensure any modifications are committed to the state
+		// Only delete empty objects if EIP158/161 (a.k.a Spurious Dragon) is in effect
+		statedb.Finalise(vmenv.ChainConfig().IsEIP158(block.Number))
+	}
+	return nil, vm.BlockContext{}, nil, fmt.Errorf("transaction index %d out of range for block %#x", txIndex, block.Hash)
 }
 
 // PrivateDebugAPI is the collection of Ethereum APIs exposed over the private
