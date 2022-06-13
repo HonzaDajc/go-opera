@@ -73,9 +73,11 @@ func importTxTraces(ctx *cli.Context) error {
 	}
 
 	log.Info("Importing transaction traces from file", "file", fn)
-	start, reported := time.Now(), time.Now()
+	start, reported, batchWrite := time.Now(), time.Now(), time.Now()
 
 	stream := rlp.NewStream(reader, 0)
+	batch := gdb.TxTraceStore().NewBatch()
+	defer batch.Reset()
 	for {
 		select {
 		case <-interrupt:
@@ -90,16 +92,40 @@ func importTxTraces(ctx *cli.Context) error {
 		if err != nil {
 			return err
 		} else {
-			gdb.TxTraceStore().SetTxTrace(e.Key, e.Traces)
+			err = batch.Put(e.Key.Bytes(), e.Traces)
+			if err != nil {
+				return err
+			}
+			if batch.ValueSize() > kvdb.IdealBatchSize {
+				err = batch.Write()
+				if err != nil {
+					return err
+				}
+				batch.Reset()
+			}
 			counter++
 			if time.Since(reported) >= statsReportLimit {
 				log.Info("Importing transaction traces", "imported", counter, "elapsed", common.PrettyDuration(time.Since(start)))
 				reported = time.Now()
 			}
+			if time.Since(batchWrite) >= statsReportLimit*10 {
+				log.Info("Compacting DB")
+				gdb.TxTraceStore().CompactDB()
+				log.Info("Compacting DB done")
+				batchWrite = time.Now()
+			}
 		}
+	}
+	err = batch.Write()
+	if err != nil {
+		return err
 	}
 	log.Info("Imported transaction traces", "imported", counter, "elapsed", common.PrettyDuration(time.Since(start)))
 
+	// final clean of the db
+	log.Info("Compacting DB")
+	gdb.TxTraceStore().CompactDB()
+	log.Info("Compacting DB done")
 	return nil
 }
 

@@ -55,6 +55,16 @@ func (s *Store) HasTxTrace(txID common.Hash) (bool, error) {
 	return s.mainDB.Has(txID.Bytes())
 }
 
+// NewBatch creates a new batch for writing tx traces
+func (s *Store) NewBatch() kvdb.Batch {
+	return s.mainDB.NewBatch()
+}
+
+// CompactDB manually starts compacting of whole txtracing store db
+func (s *Store) CompactDB() error {
+	return s.mainDB.Compact([]byte{0x00}, []byte{0xFF})
+}
+
 // ForEachTxtrace returns iterator for all transaction traces in db
 func (s *Store) ForEachTxtrace(onEvent func(key common.Hash, traces []byte) bool) {
 	it := s.mainDB.NewIterator(nil, nil)
