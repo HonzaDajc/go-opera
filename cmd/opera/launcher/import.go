@@ -237,3 +237,64 @@ func importEventsFile(srv *gossip.Service, fn string) error {
 
 	return nil
 }
+
+func importBESHistory(ctx *cli.Context) error {
+	cfg := makeAllConfigs(ctx)
+
+	rawDbs := makeDirectDBsProducer(cfg)
+	gdb := makeGossipStore(rawDbs, cfg)
+	defer gdb.Close()
+	for _, fn := range ctx.Args() {
+		err := importBESHistoryFile(gdb, fn)
+		if err != nil {
+			return err
+		}
+	}
+	log.Info("Recalculating upgrade activation heights")
+	return gdb.RecalculateUpgradeHeights()
+}
+
+func importBESHistoryFile(gdb *gossip.Store, fn string) error {
+	// Watch for Ctrl-C while the import is running.
+	// If a signal is received, the import will stop.
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(interrupt)
+
+	// Open the file handle and potentially unwrap the gzip stream
+	fh, err := os.Open(fn)
+	if err != nil {
+		return err
+	}
+	defer fh.Close()
+
+	var reader io.Reader = fh
+	if strings.HasSuffix(fn, ".gz") {
+		if reader, err = gzip.NewReader(reader); err != nil {
+			return err
+		}
+		defer reader.(*gzip.Reader).Close()
+	}
+
+	stream := rlp.NewStream(reader, 0)
+
+	log.Info("Importing epochs history from file", "file", fn)
+	for {
+		select {
+		case <-interrupt:
+			return fmt.Errorf("interrupted")
+		default:
+		}
+		bes := new(gossip.BlockEpochState)
+		err = stream.Decode(bes)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		gdb.SetHistoryBlockEpochState(bes.EpochState.Epoch, *bes.BlockState, *bes.EpochState)
+	}
+	log.Info("Imported epochs history from file", "file", fn)
+	return nil
+}

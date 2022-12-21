@@ -53,8 +53,8 @@ func (s *Store) GetHistoryBlockEpochState(epoch idx.Epoch) (*iblockproc.BlockSta
 	return &bs, &es
 }
 
-func (s *Store) ForEachHistoryBlockEpochState(fn func(iblockproc.BlockState, iblockproc.EpochState) bool) {
-	it := s.table.BlockEpochStateHistory.NewIterator(nil, nil)
+func (s *Store) ForEachHistoryBlockEpochStateFrom(start []byte, fn func(iblockproc.BlockState, iblockproc.EpochState) bool) {
+	it := s.table.BlockEpochStateHistory.NewIterator(nil, start)
 	defer it.Release()
 	for it.Next() {
 		bes := BlockEpochState{}
@@ -66,6 +66,10 @@ func (s *Store) ForEachHistoryBlockEpochState(fn func(iblockproc.BlockState, ibl
 			break
 		}
 	}
+}
+
+func (s *Store) ForEachHistoryBlockEpochState(fn func(iblockproc.BlockState, iblockproc.EpochState) bool) {
+	s.ForEachHistoryBlockEpochStateFrom(nil, fn)
 }
 
 func (s *Store) GetHistoryEpochState(epoch idx.Epoch) *iblockproc.EpochState {

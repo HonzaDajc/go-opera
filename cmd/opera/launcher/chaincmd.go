@@ -63,6 +63,18 @@ The import command imports transaction traces and replaces the old ones
 with traces from a file.
 `,
 			},
+			{
+				Name:      "epochs",
+				Usage:     "Import block-epoch history",
+				ArgsUsage: "<filename> (<filename 2> ... <filename N>)",
+				Action:    utils.MigrateFlags(importBESHistory),
+				Flags: []cli.Flag{
+					DataDirFlag,
+				},
+				Description: `
+    opera import epochs
+The import command imports block-epoch history from an RLP-encoded files and recalculates upgrade heights.`,
+			},
 		},
 	}
 	exportCommand = cli.Command{
@@ -146,6 +158,23 @@ Requires a first argument of the file to write to.
 Optional second and third arguments control the first and
 last epoch to write.
 EVM export mode is configured with --export.evm.mode.
+`,
+			},
+			{
+				Name:      "epochs",
+				Usage:     "Export block-epoch history",
+				ArgsUsage: "<filename> [<epochFrom> <epochTo>]",
+				Action:    utils.MigrateFlags(exportBESHistory),
+				Flags: []cli.Flag{
+					DataDirFlag,
+				},
+				Description: `
+    opera export epochs
+
+Requires a first argument of the file to write to.
+Optional second and third arguments control the first and
+last epoch to write. If the file ends with .gz, the output will
+be gzipped
 `,
 			},
 		},

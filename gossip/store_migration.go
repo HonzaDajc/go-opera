@@ -44,7 +44,7 @@ func (s *Store) migrations() *migration.Migration {
 		Next("erase gossip-async db", s.eraseGossipAsyncDB).
 		Next("erase SFC API table", s.eraseSfcApiTable).
 		Next("erase legacy genesis DB", s.eraseGenesisDB).
-		Next("calculate upgrade heights", s.calculateUpgradeHeights)
+		Next("calculate upgrade heights", s.RecalculateUpgradeHeights)
 }
 
 func unsupportedMigration() error {
@@ -129,7 +129,8 @@ func (s *Store) eraseGenesisDB() error {
 	return nil
 }
 
-func (s *Store) calculateUpgradeHeights() error {
+func (s *Store) RecalculateUpgradeHeights() error {
+	s.DelUpgradeHeights()
 	var prevEs *iblockproc.EpochState
 	s.ForEachHistoryBlockEpochState(func(bs iblockproc.BlockState, es iblockproc.EpochState) bool {
 		s.WriteUpgradeHeight(bs, es, prevEs)

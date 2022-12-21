@@ -25,3 +25,8 @@ func (s *Store) GetUpgradeHeights() []opera.UpgradeHeight {
 	s.cache.UpgradeHeights.Store(*hh)
 	return *hh
 }
+
+func (s *Store) DelUpgradeHeights() {
+	s.cache.UpgradeHeights.Store([]opera.UpgradeHeight{})
+	_ = s.table.UpgradeHeights.Delete([]byte{})
+}

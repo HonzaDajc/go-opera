@@ -18,6 +18,7 @@ import (
 	"gopkg.in/urfave/cli.v1"
 
 	"github.com/Fantom-foundation/go-opera/gossip"
+	"github.com/Fantom-foundation/go-opera/inter/iblockproc"
 )
 
 var (
@@ -113,4 +114,71 @@ func exportTo(w io.Writer, gdb *gossip.Store, from, to idx.Epoch) (err error) {
 	log.Info("Exported events", "last", last.String(), "exported", counter, "elapsed", common.PrettyDuration(time.Since(start)))
 
 	return
+}
+
+func exportBESHistory(ctx *cli.Context) error {
+	if len(ctx.Args()) < 1 {
+		utils.Fatalf("This command requires an argument.")
+	}
+
+	cfg := makeAllConfigs(ctx)
+
+	rawDbs := makeDirectDBsProducer(cfg)
+	gdb := makeGossipStore(rawDbs, cfg)
+	defer gdb.Close()
+
+	fn := ctx.Args().First()
+
+	// Open the file handle and potentially wrap with a gzip stream
+	fh, err := os.OpenFile(fn, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	defer fh.Close()
+
+	var writer io.Writer = fh
+	if strings.HasSuffix(fn, ".gz") {
+		writer = gzip.NewWriter(writer)
+		defer writer.(*gzip.Writer).Close()
+	}
+
+	from := idx.Epoch(1)
+	gdb.ForEachHistoryBlockEpochState(func(bs iblockproc.BlockState, es iblockproc.EpochState) bool {
+		// get first epoch with history
+		from = es.Epoch
+		return false
+	})
+	if len(ctx.Args()) > 1 {
+		n, err := strconv.ParseUint(ctx.Args().Get(1), 10, 32)
+		if err != nil {
+			return err
+		}
+		from = idx.Epoch(n)
+	}
+	to := gdb.GetEpoch()
+	if len(ctx.Args()) > 2 {
+		n, err := strconv.ParseUint(ctx.Args().Get(2), 10, 32)
+		if err != nil {
+			return err
+		}
+		to = idx.Epoch(n)
+	}
+
+	log.Info("Exporting epochs history keys to file", "file", fn, "from", from, "to", to)
+	gdb.ForEachHistoryBlockEpochStateFrom(from.Bytes(), func(bs iblockproc.BlockState, es iblockproc.EpochState) bool {
+		if es.Epoch > to {
+			return false
+		}
+		bes := &gossip.BlockEpochState{
+			BlockState: &bs,
+			EpochState: &es,
+		}
+		if err := rlp.Encode(writer, bes); err != nil {
+			utils.Fatalf("Failed to write BES", "epoch", es.Epoch, "err", err)
+			return false
+		}
+		return true
+	})
+	log.Info("Exported epochs history keys to file", "file", fn, "from", from, "to", to)
+	return nil
 }
